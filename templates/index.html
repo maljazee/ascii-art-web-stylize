@@ -13,7 +13,7 @@
         {{.Message}}
     </div>
     {{end}}
-    <form method="post" action="/">
+    <form method="post" action="/ascii-art">
         <label for="text">Text:</label>
         <textarea id="text" name="text" rows="4" required>{{.Text}}</textarea>
 
@@ -28,10 +28,7 @@
     </form>
 
     <h2>Preview:</h2>
-    <pre id="preview"></pre>
-
     {{if .Output}}
-    <h2>Generated ASCII Art:</h2>
     <pre>{{.Output}}</pre>
     {{end}}
 

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -18,8 +19,14 @@ type AsciiData struct {
 	Message string
 }
 
+type ErrorData struct {
+	Code    string
+	Message string
+}
+
 func main() {
 	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/ascii-art", AsciiHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	fmt.Printf("Starting server at localhost:8080\n")
@@ -28,25 +35,29 @@ func main() {
 	}
 }
 
-func notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/error.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNotFound)
-	tmpl.Execute(w, nil)
-}
-
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		notFoundHandler(w, r)
+		showError(w, r, http.StatusNotFound, "PAGE NOT FOUND")
 		return
 	}
 
 	tmpl, err := template.ParseFiles("templates/index.html")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		showError(w, r, http.StatusInternalServerError, "INTERNAL SERVER ERROR")
+		return
+	}
+	tmpl.Execute(w, nil)
+}
+
+func AsciiHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/ascii-art" {
+		showError(w, r, http.StatusNotFound, "PAGE NOT FOUND")
+		return
+	}
+
+	tmpl, err := template.ParseFiles("templates/index.html")
+	if err != nil {
+		showError(w, r, http.StatusInternalServerError, "INTERNAL SERVER ERROR")
 		return
 	}
 
@@ -58,10 +69,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 		if !isAscii(data.Text) || data.Text == "" {
 			data.Message = "Error: Please enter valid ASCII text."
+			showError(w, r, http.StatusBadRequest, "BAD REQUEST")
+			return
 		} else {
 			output, err := generateAsciiArt(data.Text, data.Banner)
 			if err != nil {
 				data.Message = "Error: Unable to generate ASCII art. Please try again."
+				showError(w, r, http.StatusInternalServerError, "INTERNAL SERVER ERROR")
+				return
 			} else {
 				data.Output = output
 				data.Message = "ASCII art generated successfully!"
@@ -78,13 +93,12 @@ func generateAsciiArt(text, banner string) (string, error) {
 	filename := "ArtStyles/" + banner + ".txt"
 	var outputBuffer strings.Builder
 
+	if text == "\n" || text == "" {
+		return "\n", nil
+	}
 	strArr := strings.Split(text, "\n")
 	for i := 0; i <= len(strArr)-1; i++ {
-		if i-1 >= 0 {
-			if strArr[i] == "" && i == len(strArr)-1 {
-				continue
-			}
-		}
+
 		if strArr[i] == "" {
 			outputBuffer.WriteString("\n")
 			continue
@@ -101,9 +115,6 @@ func generateAsciiArt(text, banner string) (string, error) {
 			if j < 8 {
 				outputBuffer.WriteString("\n")
 			}
-		}
-		if i < len(strArr)-1 {
-			outputBuffer.WriteString("\n")
 		}
 	}
 
@@ -136,10 +147,24 @@ func printLine(filename string, line int, output *strings.Builder) error {
 }
 
 func isAscii(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
 			return false
 		}
 	}
 	return true
+}
+
+func showError(w http.ResponseWriter, r *http.Request, code int, message string) {
+	w.WriteHeader(code)
+	tmpl, err := template.ParseFiles("templates/error.html")
+	if err != nil {
+		http.Error(w, "500 INTERNAL SERVER ERROR", http.StatusInternalServerError)
+		return
+	}
+	errorData := ErrorData{
+		Code:    strconv.Itoa(code),
+		Message: message,
+	}
+	tmpl.Execute(w, errorData)
 }
